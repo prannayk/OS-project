@@ -286,7 +286,7 @@ ExceptionHandler(ExceptionType which)
 		machine->WriteRegister(2, forkThread->getPID());
 		currentThread->SaveUserState();
 		forkThread->ThreadFork(&start_fork,0);
-	} else if ((which==SyscallException) && (type=SysCall_NumInstr)) {
+	} else if ((which==SyscallException) && (type==SysCall_NumInstr)) {
 		machine->WriteRegister(2, stats->userTicks);
 		// Advance program counters.
 		machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
@@ -330,7 +330,7 @@ ExceptionHandler(ExceptionType which)
 		delete executable;
 		space->InitUserModeCPURegisters();
 		space->RestoreContextOnSwitch();
-	} else if ((which == SyscallException) && (type=SysCall_Exit)) {
+	} else if ((which == SyscallException) && (type==SysCall_Exit)) {
         int code = machine->ReadRegister(4);
         int me = currentThread->getPID();
         int baap = currentThread->getPPID();
