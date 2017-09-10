@@ -117,6 +117,7 @@ class NachOSThread {
     void setStatus(ThreadStatus st) { status = st; }
 	int getPID() { return pid;}
 	int getPPID();
+    void KillIt();
     char* getName() { return (name); }
     void Print() { printf("%s, ", name); }
 

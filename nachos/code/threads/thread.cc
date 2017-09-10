@@ -414,3 +414,9 @@ void NachOSThread::setExitStatus(int baap, int me, int code, bool margaya){
         bache = bache->pointer;
     }
 }
+
+void NachOSThread::KillIt(){
+    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+    machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg)+4);
+}
