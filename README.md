@@ -20,11 +20,12 @@ To get the time, we directly call stats->TotalTicks() and return it by writing i
 # Yield
 To yield the current running thread to the CPU so that some new thread can be schedules we simply need to call the YieldCPU() method for the current thread object and we are done.
 # Sleep
-
+Sleep is executed by maintaining a min heap of all threads in the order of their wake up time. We check for threads that have to removed and added as required at the end of every interrupt that is generated after a single tick. 
 # Exec
-
+We create a new address space, push the new executable into it, set up the user registers and then execute the program from the first instruction. 
 # Exit
-
+We wake up all waiting processes, which are maintained in a list of sleeping processes. After that is done, we just kill the process by resetting all it's children. 
 # Join
-
+We check if the process has exited and otherwise just wait for the process to exit. if it has then we return it's exit status. This is done by maintaining a wait list. Whenever a child process dies it wakes up the required proces and puts it back into execution. It also puts the child exit code into the return register before doing so using a function defined for the NachOSThreadObject. 
 # Fork
+We create a new process, and set up it's address space by using alternate constructor. We allocate it's space by maintaining the a global memory start pointer. Following that we set up the kernel page table and copy all the physical pages, byte by byte. on completing that we set up the return registers and maintain the context space. We then create a fork function which performs the required tasks to ensure the process can be switched into the processor. On comleting this, the process is automatically added to ready queue and the parent is returned the pid of the forked process. 
