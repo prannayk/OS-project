@@ -14,7 +14,7 @@ To get the Physical address for the passed Virtual address we do the following. 
 To get the pid we call pid method of the thread object. Each thread has it's pid and ppid's set appropriately. We set the appropriate pid and ppid for any thread object whenever the constructor of the object is being called. When the construtor is called, the pid for the new thread to be created is assigned the value of a global counter. After that the global counter is incremented. Thus every new thread gets a new and unique pid when it is created.
 To set the appropriate PPID for any thread, whenever any new thread object's construtor is called we call the pid for the current process which will be the parend for the new thread to be created and then assign this pid to the ppid for the new process to be created. Just one exception is that if the (currentThread == NULL), ie this is the first process to be created and hence wouldn't have any parent, we assign it a ppid = 1.
 # GetNumInstr[TODO]
-To get the Number of Instructions, we call the getIC() method for the current thread object.
+To get the Number of Instructions, we call stats->userTicks() method for the current thread object.
 # Time
 To get the time, we directly call stats->TotalTicks() and return it by writing it into register number 2.
 # Yield
