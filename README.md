@@ -8,3 +8,29 @@ make: *** [nachos] Error 1
 use the following command:
 
 `sudo ln -s /usr/lib32/libstdc++.so.6 /usr/lib32/libstdc++.so`
+
+## Implemenations of various syscalls
+
+# GetReg
+
+# GetPA
+
+# GetPID
+
+# GetPPID
+
+# GetNumInstr
+
+# Time
+
+# Yield
+
+# Sleep
+
+# Exec
+
+# Exit
+
+# Join
+
+# Fork
