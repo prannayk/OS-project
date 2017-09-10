@@ -335,8 +335,8 @@ ExceptionHandler(ExceptionType which)
         int me = currentThread->getPID();
         int baap = currentThread->getPPID();
         currentThread->setExitStatus(baap, me, code, FALSE);
-        currentThread->FinishThread();
         scheduler->wakeAction(me, code);
+        currentThread->KillIt(); 
     } else {
 		printf("Unexpected user mode exception %d %d\n", which, type);
 		ASSERT(FALSE);
