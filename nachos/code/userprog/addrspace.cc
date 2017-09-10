@@ -73,8 +73,9 @@ ProcessAddressSpace::ProcessAddressSpace(){
 	for (int j=0; j < numVirtualPages; j++){
 		int pmem = parentTable[j].physicalPage;
 		int mem = KernelPageTable[j].physicalPage;
-		for(int k=0;k<PageSize;k++)
+		for(int k=0;k<PageSize;k++){
 			machine->mainMemory[PageSize*mem+k] = machine->mainMemory[PageSize*pmem+k];
+        }
 	}
 	global_mem_start += numVirtualPages;
 }
@@ -136,7 +137,7 @@ ProcessAddressSpace::ProcessAddressSpace(OpenFile *executable)
         executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
 			noffH.initData.size, noffH.initData.inFileAddr);
     }
-	global_mem_start += NumPhysPages;
+	global_mem_start += numVirtualPages;
 }
 
 //----------------------------------------------------------------------
