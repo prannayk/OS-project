@@ -3,7 +3,7 @@
 ## 150511 -  Prannay Khosla
 ## 150499 -  Prakhar Agarwal
 ## 150728 -  Soumye Singhal
-## 150298 -  Jaismine Kaur
+## 150298 -  Jaismin Kaur
 
 # GetReg
 The argument would have been passed in the Register Number 4. So, to get the Register number which we want to read, we call
