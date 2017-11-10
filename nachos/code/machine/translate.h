@@ -40,7 +40,16 @@ class TranslationEntry {
 			// page is referenced or modified.
     bool dirty;         // This bit is set by the hardware every time the
 			// page is modified.
-	bool shared;
+	bool shared; //  if the page is shared
+	bool swapped; // if the page is swapped into a thread specific cache
 };
 
+class InverseEntry {
+	public :
+		TranslationEntry* entry;
+		int pid;
+		bool blocked;
+		InverseEntry * prev,* next;
+		int ref;
+};
 #endif

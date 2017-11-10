@@ -96,7 +96,12 @@ main(int argc, char **argv)
         if (!strcmp(*argv, "-z"))               // print copyright
             printf (copyright);
 #ifdef USER_PROGRAM
-        if (!strcmp(*argv, "-A")) {		// read scheduling algorithm
+		if (!strcmp(*argv, "-R")) {
+			repl = atoi(*(argv + 1));
+			argCount = 2;
+			ASSERT(repl >= 0);
+			ASSERT(repl < 5);
+        } else if (!strcmp(*argv, "-A")) {		// read scheduling algorithm
            schedulingAlgo = atoi(*(argv + 1));
            argCount = 2;
            ASSERT((schedulingAlgo > 0) && (schedulingAlgo <= 4));

@@ -24,7 +24,7 @@ class ProcessAddressSpace {
 					// initializing it with the program
 					// stored in the file "executable"
 
-    ProcessAddressSpace (ProcessAddressSpace *parentSpace);	// Used by fork
+    ProcessAddressSpace (ProcessAddressSpace *parentSpace, int pid);	// Used by fork
 
     ~ProcessAddressSpace();			// De-allocate an address space
 
@@ -38,12 +38,16 @@ class ProcessAddressSpace {
 	void ExpandSpace(int, int&);
     TranslationEntry* GetPageTable();
 	void loadPage(int);
+	void removePage(int);
 	unsigned codeStart, codeEnd, dataStart, dataEnd;
+	char* GetSwap(){ return swapspace; }
+	void updateUse(int);
   private:
     TranslationEntry *KernelPageTable;	// Assume linear page table translation
 					// for now!
     unsigned int numVirtualPages;		// Number of pages in the virtual 
 					// address space
+	char* swapspace;
 };
 
 #endif // ADDRSPACE_H

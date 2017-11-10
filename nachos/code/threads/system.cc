@@ -7,7 +7,6 @@
 
 #include "copyright.h"
 #include "system.h"
-
 // This defines *all* of the global data structures used by Nachos.
 // These are all initialized and de-allocated by this file.
 
@@ -20,14 +19,15 @@ Timer *timer;				// the hardware timer device,
 					// for invoking context switches
 
 unsigned numPagesAllocated;              // number of physical frames allocated
-
+unsigned PagePointer;
+InverseEntry* PageTable ; // create a page table for all physical pages
 NachOSThread *threadArray[MAX_THREAD_COUNT];  // Array of thread pointers
 unsigned thread_index;			// Index into this array (also used to assign unique pid)
 bool initializedConsoleSemaphores;
 bool exitThreadArray[MAX_THREAD_COUNT];  //Marks exited threads
-
+LRUList * lrulist;
 TimeSortedWaitQueue *sleepQueueHead;	// Needed to implement syscall_wrapper_Sleep
-
+int repl;
 int schedulingAlgo;			// Scheduling algorithm to simulate
 char **batchProcesses;			// Names of batch processes
 int *priority;				// Process priority
@@ -112,12 +112,15 @@ Initialize(int argc, char **argv)
     int argCount, i;
     char* debugArgs = "";
     bool randomYield = FALSE;
-
     initializedConsoleSemaphores = false;
     numPagesAllocated = 0;
-
-    schedulingAlgo = NON_PREEMPTIVE_BASE;	// Default
-
+	PagePointer = 0;
+	PageTable = new InverseEntry [NumPhysPages];
+	for (int s=0;s < NumPhysPages ; s++){	
+		PageTable[s].entry=NULL; //all physical pages are un-allocated
+	}
+	schedulingAlgo = NON_PREEMPTIVE_BASE;	// Default
+	lrulist = NULL;
     batchProcesses = new char*[MAX_BATCH_SIZE];
     ASSERT(batchProcesses != NULL);
     for (i=0; i<MAX_BATCH_SIZE; i++) {
@@ -254,6 +257,75 @@ Cleanup()
 // GetPhysicalPage
 // returns index of next physical page
 int
-GetPhysicalPage(){
-	return (numPagesAllocated++);
+GetPhysicalPage(int pid){
+	if (repl == NORMAL_REPL){
+		while(PageTable[PagePointer].entry != NULL)
+			PagePointer = (PagePointer + 1)%NumPhysPages;
+		PageTable[PagePointer].pid = pid;
+		numPagesAllocated++;	
+		return PagePointer;
+	} else if (repl == FIFO){ // FIFO
+		while(PageTable[PagePointer].entry!=NULL){
+			if (PageTable[PagePointer].entry->shared || PageTable[PagePointer].blocked)
+				PagePointer = (PagePointer+1)%NumPhysPages;
+			else 
+				break;
+		}
+		if (PageTable[PagePointer].entry != NULL){
+			threadArray[PageTable[PagePointer].pid]->space->removePage(PageTable[PagePointer].entry->virtualPage);
+			numPagesAllocated--;
+		}
+		PageTable[PagePointer].pid = pid;
+		numPagesAllocated++;
+		int allocated = PagePointer;
+		PagePointer = (PagePointer+1)%NumPhysPages;
+		return allocated;
+	} else if (repl == LRU) {
+		if (numPagesAllocated < NumPhysPages){
+			while(PageTable[PagePointer].entry != NULL)
+				PagePointer = (PagePointer + 1)%NumPhysPages;
+			PageTable[PagePointer].pid = pid;
+			numPagesAllocated++;
+			return PagePointer;
+		} else {
+			InverseEntry* taildelete = lrulist->ReplaceTail();
+			threadArray[taildelete->pid]->space->removePage(taildelete->entry->virtualPage);
+			return taildelete->entry->physicalPage;
+		}
+	} else if (repl == LRU_CLOCK) {
+		while(PageTable[PagePointer].entry != NULL){
+			if (PageTable[PagePointer].entry->shared || PageTable[PagePointer].blocked)
+				PagePointer = (PagePointer + 1)%NumPhysPages;
+			else if (PageTable[PagePointer].ref)
+				PageTable[PagePointer].ref --;
+			else
+				break;
+		}
+		if (PageTable[PagePointer].entry != NULL){
+			threadArray[PageTable[PagePointer].pid]->space->removePage(PageTable[PagePointer].entry->virtualPage);
+			numPagesAllocated--;
+		}
+		PageTable[PagePointer].pid = pid;
+		numPagesAllocated++;
+		int allocated = PagePointer;
+		PagePointer = (PagePointer+1)%NumPhysPages;
+		return allocated;
+	} else if (repl == RANDOM_REPL) {
+		while (PageTable[PagePointer].entry != NULL){
+			PagePointer = Random() % NumPhysPages;
+			if (!(PageTable[PagePointer].entry->shared || PageTable[PagePointer].blocked))	
+				break;
+		}
+		if (PageTable[PagePointer].entry != NULL){
+			threadArray[PageTable[PagePointer].pid]->space->removePage(PageTable[PagePointer].entry->virtualPage);
+			numPagesAllocated--;
+		}
+		PageTable[PagePointer].pid = pid;
+		numPagesAllocated++;
+		int allocated = PagePointer;
+		PagePointer = (PagePointer+1)%NumPhysPages;
+		return allocated;
+	} else {
+		return IllegalInstrException;
+	}
 }

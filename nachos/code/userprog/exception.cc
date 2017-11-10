@@ -120,13 +120,13 @@ ExceptionHandler(ExceptionType which)
     else if ((which == SyscallException) && (type == SysCall_Exec)) {
        // Copy the executable name into kernel space
        vaddr = machine->ReadRegister(4);
-       machine->ReadMem(vaddr, 1, &memval);
+       while(!machine->ReadMem(vaddr, 1, &memval));
        i = 0;
        while ((*(char*)&memval) != '\0') {
           buffer[i] = (*(char*)&memval);
           i++;
           vaddr++;
-          machine->ReadMem(vaddr, 1, &memval);
+          while(!machine->ReadMem(vaddr, 1, &memval));
        }
        buffer[i] = (*(char*)&memval);
        LaunchUserProcess(buffer);
@@ -159,7 +159,7 @@ ExceptionHandler(ExceptionType which)
        machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg)+4);
        
        child = new NachOSThread("Forked thread", GET_NICE_FROM_PARENT);
-       child->space = new ProcessAddressSpace (currentThread->space);  // Duplicates the address space
+       child->space = new ProcessAddressSpace (currentThread->space, child->GetPID());  // Duplicates the address space
 	   child->SetFilename(currentThread->GetFilename());
        child->SaveUserState ();		     		      // Duplicate the register set
        child->ResetReturnValue ();			     // Sets the return register to zero
@@ -313,6 +313,7 @@ ExceptionHandler(ExceptionType which)
 		
 	}else if (which == PageFaultException) {
 		currentThread->SortedInsertInWaitQueue(stats->totalTicks + 1000);
+		stats->pageFaultCount++;
 	}else {
 	printf("Unexpected user mode exception %d %d\n", which, type);
 	ASSERT(FALSE);

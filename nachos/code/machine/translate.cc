@@ -220,6 +220,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 		return PageFaultException;
 	}
 	entry = &KernelPageTable[vpn];
+	currentThread->space->updateUse(entry->physicalPage);
     } else {
         for (entry = NULL, i = 0; i < TLBSize; i++)
     	    if (tlb[i].valid && (tlb[i].virtualPage == vpn)) {
