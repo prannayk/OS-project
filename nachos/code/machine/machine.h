@@ -32,7 +32,8 @@
 					// the disk sector size, for
 					// simplicity
 
-#define NumPhysPages    32
+//#define NumPhysPages    32
+#define NumPhysPages    1024
 #define MemorySize 	(NumPhysPages * PageSize)
 #define TLBSize		4		// if there is a TLB, make it small
 
@@ -139,6 +140,9 @@ class Machine {
     				// and return an exception code if the 
 				// translation couldn't be completed.
 
+    int GetPA (unsigned vaddr); // Returns the physical address corresponding
+                                // to the passed virtual address.
+
     void RaiseException(ExceptionType which, int badVAddr);
 				// Trap to the Nachos kernel, because of a
 				// system call or other exception.  
@@ -155,6 +159,7 @@ class Machine {
 
     char *mainMemory;		// physical memory to store user program,
 				// code and data, while executing
+ 
     int registers[NumTotalRegs]; // CPU registers, for executing user programs
 
 
@@ -180,7 +185,7 @@ class Machine {
 					// "read-only" to Nachos kernel code
 
     TranslationEntry *KernelPageTable;
-    unsigned int pageTableSize;
+    unsigned int KernelPageTableSize;
 
   private:
     bool singleStep;		// drop back into the debugger after each

@@ -13,6 +13,14 @@
 #include "console.h"
 #include "addrspace.h"
 #include "synch.h"
+#include "filesys.h"
+
+void
+BatchStartFunction (int dummy)
+{
+   currentThread->Startup();
+   machine->Run();
+}
 
 //----------------------------------------------------------------------
 // LaunchUserProcess
@@ -24,9 +32,9 @@ void
 LaunchUserProcess(char *filename)
 {
     OpenFile *executable = fileSystem->Open(filename);
+	currentThread->SetFilename(filename);
     ProcessAddressSpace *space;
-
-    if (executable == NULL) {
+	if (executable == NULL) {
 	printf("Unable to open file %s\n", filename);
 	return;
     }
@@ -81,4 +89,95 @@ ConsoleTest (char *in, char *out)
 	writeDone->P() ;        // wait for write to finish
 	if (ch == 'q') return;  // if q, quit
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+// ReadInputAndFork (multiprogramming test)
+//	Read the scheduling algorithm.
+//      Read a set of user programs along with the priorities.  Open the executables, load them into
+//      memory, and invoke the scheduler.
+//---------------------------------------------------------------------------------------------------
+
+void
+ReadInputAndFork (char *filename)
+{
+   OpenFile *inFile = fileSystem->Open(filename);
+   char c, buffer[16];
+   unsigned batchSize=0, bytesRead, charPointer, i;
+ 
+   excludeMainThread = TRUE;
+  
+   if (inFile == NULL) {
+      printf("Unable to open file %s\n", filename);
+      return;
+   }
+
+   inFile->Read(&c, 1);
+   schedulingAlgo = 0;
+   // Read scheduling algorithm
+   while (c != '\n') {
+      schedulingAlgo = 10*schedulingAlgo + c - '0';
+      inFile->Read(&c, 1);
+   }
+
+   //printf("%d\n", schedulingAlgo);
+
+   if ((schedulingAlgo == ROUND_ROBIN) || (schedulingAlgo == UNIX_SCHED)) {
+      ASSERT (SCHED_QUANTUM > 0);
+   }
+
+   bytesRead = inFile->Read(&c, 1);
+   while (bytesRead != 0) {
+      charPointer = 0;
+      while ((c != ' ') && (c != '\n')) {
+         batchProcesses[batchSize][charPointer] = c;
+         charPointer++;
+         bytesRead = inFile->Read(&c, 1);
+      }
+      batchProcesses[batchSize][charPointer] = '\0';
+      if (c == '\n') {
+         priority[batchSize] = MAX_NICE_PRIORITY;
+      }
+      else {
+         bytesRead = inFile->Read(&c, 1);
+         priority[batchSize] = 0;
+         while (c != '\n') {
+            priority[batchSize] = 10*priority[batchSize] + c - '0';
+            bytesRead = inFile->Read(&c, 1);
+         }
+      }
+      //printf("%s %d\n", batchProcesses[batchSize], priority[batchSize]);
+      batchSize++;
+      bytesRead = inFile->Read(&c, 1);
+   }
+   delete inFile;
+
+   for (i=0; i<batchSize; i++) {
+      // Create one child per iteration
+      inFile = fileSystem->Open(batchProcesses[i]);
+      if (inFile == NULL) {
+         printf("Unable to open file %s\n", batchProcesses[i]);
+         return;
+      }
+      sprintf(buffer,"Thread_%d",i+1);
+      NachOSThread *child = new NachOSThread(buffer, priority[i]);
+      child->space = new ProcessAddressSpace (inFile);
+      delete inFile;
+      child->space->InitUserModeCPURegisters();             // set the initial register values
+      child->SaveUserState ();
+      child->CreateThreadStack (BatchStartFunction, 0);
+      child->Schedule ();
+      //printf("Created %d\n", i);
+   }
+
+   // Cleanly exit current thread
+   // Assume exit code zero
+   printf("[pid %d]: Exit called. Code: %d\n", currentThread->GetPID(), 0);
+   exitThreadArray[currentThread->GetPID()] = true;
+
+   // Find out if all threads have called exit
+   for (i=0; i<thread_index; i++) {
+       if (!exitThreadArray[i]) break;
+   }
+   currentThread->Exit(i==thread_index, 0);
 }

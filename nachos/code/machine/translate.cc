@@ -199,7 +199,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	return AddressErrorException;
     }
     
-   // we must have either a TLB or a page table, but not both!
+    // we must have either a TLB or a page table, but not both!
     ASSERT(tlb == NULL || KernelPageTable == NULL);	
     ASSERT(tlb != NULL || KernelPageTable != NULL);	
 
@@ -209,14 +209,15 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
     offset = (unsigned) virtAddr % PageSize;
     
     if (tlb == NULL) {		// => page table => vpn is index into table
-	if (vpn >= pageTableSize) {
+	if (vpn >= KernelPageTableSize) {
 	    DEBUG('a', "virtual page # %d too large for page table size %d!\n", 
-			virtAddr, pageTableSize);
+			virtAddr, KernelPageTableSize);
 	    return AddressErrorException;
 	} else if (!KernelPageTable[vpn].valid) {
 	    DEBUG('a', "virtual page # %d too large for page table size %d!\n", 
-			virtAddr, pageTableSize);
-	    return PageFaultException;
+			virtAddr, KernelPageTableSize);
+	    currentThread->space->loadPage(vpn);
+		return PageFaultException;
 	}
 	entry = &KernelPageTable[vpn];
     } else {
@@ -252,4 +253,29 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
     ASSERT((*physAddr >= 0) && ((*physAddr + size) <= MemorySize));
     DEBUG('a', "phys addr = 0x%x\n", *physAddr);
     return NoException;
+}
+
+//----------------------------------------------------------------------
+// Machine::GetPA
+//      Returns the physical address corresponding to the passed virtual
+//      address. Error conditions to check: virtual page number (vpn) is
+//      bigger than the page table size and the page table entry is not valid.
+//      In case of error, returns -1.
+//----------------------------------------------------------------------
+
+int
+Machine::GetPA (unsigned vaddr)
+{
+   unsigned vpn = vaddr/PageSize;
+   unsigned offset = vaddr % PageSize;
+   TranslationEntry *entry;
+   unsigned int pageFrame;
+
+   if ((vpn < KernelPageTableSize) && KernelPageTable[vpn].valid) {
+      entry = &KernelPageTable[vpn];
+      pageFrame = entry->physicalPage;
+      if (pageFrame >= NumPhysPages) return -1;
+      return pageFrame * PageSize + offset;
+   }
+   else return -1;
 }

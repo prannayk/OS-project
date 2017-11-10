@@ -26,7 +26,7 @@
 //	object file header, in case the file was generated on a little
 //	endian machine, and we're now running on a big endian machine.
 //----------------------------------------------------------------------
-int global_mem_start=0;
+
 static void 
 SwapHeader (NoffHeader *noffH)
 {
@@ -40,6 +40,37 @@ SwapHeader (NoffHeader *noffH)
 	noffH->uninitData.size = WordToHost(noffH->uninitData.size);
 	noffH->uninitData.virtualAddr = WordToHost(noffH->uninitData.virtualAddr);
 	noffH->uninitData.inFileAddr = WordToHost(noffH->uninitData.inFileAddr);
+}
+
+void 
+ProcessAddressSpace::loadPage(int vpn){
+	KernelPageTable[vpn].physicalPage = GetPhysicalPage();
+	KernelPageTable[vpn].valid = TRUE;
+    bzero(&machine->mainMemory[KernelPageTable[vpn].physicalPage*PageSize], PageSize);
+	int virtualStart = vpn*PageSize;
+	int virtualEnd = virtualStart + PageSize;
+	if (((virtualStart <= codeStart) && (codeStart <= virtualEnd)) || ((virtualStart <= codeEnd) && (virtualEnd >= codeEnd)) || ((codeStart <= virtualStart) && (codeEnd >= virtualEnd))){
+		unsigned cstart = max(codeStart, virtualStart);
+		unsigned cend = min(virtualEnd -1, codeEnd);
+		unsigned offset = cstart % PageSize;
+		unsigned csize = cend - cstart + 1;
+		NoffHeader noffH; OpenFile* exec;
+		exec = fileSystem->Open(currentThread->GetFilename());
+		exec->ReadAt((char *)&noffH, sizeof(noffH), 0);
+		unsigned filepos = noffH.code.inFileAddr + (cstart - codeStart);
+		exec->ReadAt(&(machine->mainMemory[KernelPageTable[vpn].physicalPage*PageSize + offset]),PageSize, filepos );
+	}
+	if (((virtualStart <= dataStart) && (dataStart <= virtualEnd)) || ((virtualStart <= dataEnd) && (virtualEnd >= dataEnd)) || ((dataStart <= virtualStart) && (dataEnd >= virtualEnd))){
+		unsigned cstart = max(dataStart, virtualStart);
+		unsigned cend = min(virtualEnd -1, dataEnd);
+		unsigned offset = cstart % PageSize;
+		unsigned csize = cend - cstart + 1;
+		NoffHeader noffH; OpenFile* exec;
+		exec = fileSystem->Open(currentThread->GetFilename());
+		exec->ReadAt((char *)&noffH, sizeof(noffH), 0);
+		unsigned filepos = noffH.initData.inFileAddr + (cstart - dataStart);
+		exec->ReadAt(&(machine->mainMemory[KernelPageTable[vpn].physicalPage*PageSize + offset]),csize, filepos );
+	}
 }
 
 //----------------------------------------------------------------------
@@ -57,34 +88,13 @@ SwapHeader (NoffHeader *noffH)
 //	"executable" is the file containing the object code to load into memory
 //----------------------------------------------------------------------
 
-ProcessAddressSpace::ProcessAddressSpace(){
-	numVirtualPages = currentThread->space->numVirtualPages;
-	KernelPageTable = new TranslationEntry[numVirtualPages];
-	TranslationEntry * parentTable = currentThread->space->KernelPageTable;
-	int start = global_mem_start;
-	for(int i=0;i<numVirtualPages;i++){
-		KernelPageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-		KernelPageTable[i].physicalPage = start+i;
-		KernelPageTable[i].valid = parentTable[i].valid;
-		KernelPageTable[i].use = parentTable[i].use;
-		KernelPageTable[i].dirty = parentTable[i].dirty;
-		KernelPageTable[i].readOnly = parentTable[i].readOnly;  // if the code segment was entirely on 
-	}
-	for (int j=0; j < numVirtualPages; j++){
-		int pmem = parentTable[j].physicalPage;
-		int mem = KernelPageTable[j].physicalPage;
-		for(int k=0;k<PageSize;k++){
-			machine->mainMemory[PageSize*mem+k] = machine->mainMemory[PageSize*pmem+k];
-        }
-	}
-	global_mem_start += numVirtualPages;
-}
-
 ProcessAddressSpace::ProcessAddressSpace(OpenFile *executable)
 {
     NoffHeader noffH;
     unsigned int i, size;
-
+    unsigned vpn, offset;
+    TranslationEntry *entry;
+    unsigned int pageFrame;
     executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
     if ((noffH.noffMagic != NOFFMAGIC) && 
 		(WordToHost(noffH.noffMagic) == NOFFMAGIC))
@@ -98,48 +108,111 @@ ProcessAddressSpace::ProcessAddressSpace(OpenFile *executable)
     numVirtualPages = divRoundUp(size, PageSize);
     size = numVirtualPages * PageSize;
 
-    ASSERT(numVirtualPages <= NumPhysPages);		// check we're not trying
-						// to run anything too big --
-						// at least until we have
-						// virtual memory
+    ASSERT(numVirtualPages+numPagesAllocated <= NumPhysPages);		// check we're not trying
+										// to run anything too big --
+										// at least until we have
+										// virtual memory
 
     DEBUG('a', "Initializing address space, num pages %d, size %d\n", 
 					numVirtualPages, size);
-// first, set up the translation 
-	global_mem_start = 0;
-	int start = 0;
     KernelPageTable = new TranslationEntry[numVirtualPages];
     for (i = 0; i < numVirtualPages; i++) {
-	KernelPageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-	KernelPageTable[i].physicalPage = start+i;
-	KernelPageTable[i].valid = TRUE;
+	KernelPageTable[i].virtualPage = i;
+	KernelPageTable[i].physicalPage = -1;
+	KernelPageTable[i].valid = FALSE;
 	KernelPageTable[i].use = FALSE;
 	KernelPageTable[i].dirty = FALSE;
-	KernelPageTable[i].readOnly = FALSE;  // if the code segment was entirely on 
-					// a separate page, we could set its 
-					// pages to be read-only
-    }
-    
-// zero out the entire address space, to zero the unitialized data segment 
-// and the stack segment
-    bzero(machine->mainMemory, size);
+	KernelPageTable[i].readOnly = FALSE;  
+	KernelPageTable[i].shared = FALSE;
+	}
 
-// then, copy in the code and data segments into memory
-    if (noffH.code.size > 0) {
-        DEBUG('a', "Initializing code segment, at 0x%x, size %d\n", 
-			noffH.code.virtualAddr, noffH.code.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.code.virtualAddr]),
-			noffH.code.size, noffH.code.inFileAddr);
-    }
-    if (noffH.initData.size > 0) {
-        DEBUG('a', "Initializing data segment, at 0x%x, size %d\n", 
-			noffH.initData.virtualAddr, noffH.initData.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
-			noffH.initData.size, noffH.initData.inFileAddr);
-    }
-	global_mem_start += numVirtualPages;
+	codeStart = noffH.code.virtualAddr;
+	codeEnd = noffH.code.size + codeStart;
+	dataStart = noffH.initData.virtualAddr;
+	dataEnd = noffH.initData.size + dataStart;
+
 }
 
+//----------------------------------------------------------------------
+// ProcessAddressSpace::ProcessAddressSpace (ProcessAddressSpace*) is called by a forked thread.
+//      We need to duplicate the address space of the parent.
+//----------------------------------------------------------------------
+
+ProcessAddressSpace::ProcessAddressSpace(ProcessAddressSpace *parentSpace)
+{
+    numVirtualPages = parentSpace->GetNumPages();
+    unsigned i, size = numVirtualPages * PageSize;
+
+    ASSERT(numVirtualPages+numPagesAllocated <= NumPhysPages);          
+    DEBUG('a', "Initializing address space, num pages %d, size %d\n",
+                                        numVirtualPages, size);
+    TranslationEntry* parentPageTable = parentSpace->GetPageTable();
+    KernelPageTable = new TranslationEntry[numVirtualPages];
+    for (i = 0; i < numVirtualPages; i++) {
+		KernelPageTable[i].virtualPage = i;
+		if((!parentPageTable[i].shared) && parentPageTable[i].valid){
+			KernelPageTable[i].physicalPage = GetPhysicalPage();
+			unsigned startAddrParent = parentPageTable[i].physicalPage*PageSize;
+		    unsigned startAddrChild = KernelPageTable[i].physicalPage*PageSize;
+		    for (int j=0; j<PageSize; j++) {
+		       machine->mainMemory[startAddrChild+j] = machine->mainMemory[startAddrParent+j];
+		    }
+		} else if (parentPageTable[i].shared)
+			KernelPageTable[i].physicalPage = parentPageTable[i].physicalPage;
+        KernelPageTable[i].valid = parentPageTable[i].valid;
+        KernelPageTable[i].use = parentPageTable[i].use;
+        KernelPageTable[i].dirty = parentPageTable[i].dirty;
+        KernelPageTable[i].readOnly = parentPageTable[i].readOnly; 
+		KernelPageTable[i].shared = parentPageTable[i].shared;
+    }
+	codeStart = parentSpace->codeStart;
+	dataStart = parentSpace->dataStart;
+	codeEnd = parentSpace->codeEnd;
+	dataEnd = parentSpace->dataEnd;
+
+}
+
+//----------------------------------------------------------------------
+// ProcessAddressSpace::ExpandSpace (int size, int &start) is called by a forked thread.
+//      We need to duplicate the address space of the parent.
+//----------------------------------------------------------------------
+void
+ProcessAddressSpace::ExpandSpace (int size, int &start)
+{
+	int sharedPages = divRoundUp(size, PageSize);
+	int oldVpages = this->GetNumPages();
+    numVirtualPages = oldVpages + sharedPages;
+    unsigned i; size = numVirtualPages * PageSize;
+
+    ASSERT(sharedPages+numPagesAllocated <= NumPhysPages);                
+    DEBUG('a', "Initializing shared address space, num pages %d, size %d\n",
+                                        numVirtualPages, size);
+    // first, set up the translation
+    TranslationEntry* parentPageTable = this->GetPageTable();
+    KernelPageTable = new TranslationEntry[numVirtualPages];
+	int shared = 0; 
+    for (i = 0; i < numVirtualPages; i++) {
+	    KernelPageTable[i].virtualPage = i;
+		if (i < oldVpages){ 
+		    KernelPageTable[i].physicalPage = parentPageTable[i].physicalPage;
+			KernelPageTable[i].valid = parentPageTable[i].valid;
+			KernelPageTable[i].use = parentPageTable[i].use;
+	        KernelPageTable[i].dirty = parentPageTable[i].dirty;
+		    KernelPageTable[i].readOnly = parentPageTable[i].readOnly;  
+			KernelPageTable[i].shared = parentPageTable[i].shared;
+		} else {
+			KernelPageTable[i].physicalPage = GetPhysicalPage();
+			if (!shared) {shared++ ; start = KernelPageTable[i].virtualPage*PageSize; }
+			bzero(&machine->mainMemory[KernelPageTable[i].physicalPage*PageSize], PageSize);
+			KernelPageTable[i].valid = TRUE;
+	        KernelPageTable[i].use = FALSE;
+		    KernelPageTable[i].dirty = FALSE;
+			KernelPageTable[i].readOnly = FALSE;  
+			KernelPageTable[i].shared = TRUE;
+		}
+    }
+	RestoreContextOnSwitch();
+}
 //----------------------------------------------------------------------
 // ProcessAddressSpace::~ProcessAddressSpace
 // 	Dealloate an address space.  Nothing for now!
@@ -151,7 +224,7 @@ ProcessAddressSpace::~ProcessAddressSpace()
 }
 
 //----------------------------------------------------------------------
-// ProcessAddressSpace::InitUserModeCPURegisters
+	// ProcessAddressSpace::InitUserModeCPURegisters
 // 	Set the initial values for the user-level register set.
 //
 // 	We write these directly into the "machine" registers, so
@@ -204,5 +277,17 @@ void ProcessAddressSpace::SaveContextOnSwitch()
 void ProcessAddressSpace::RestoreContextOnSwitch() 
 {
     machine->KernelPageTable = KernelPageTable;
-    machine->pageTableSize = numVirtualPages;
+    machine->KernelPageTableSize = numVirtualPages;
+}
+
+unsigned
+ProcessAddressSpace::GetNumPages()
+{
+   return numVirtualPages;
+}
+
+TranslationEntry*
+ProcessAddressSpace::GetPageTable()
+{
+   return KernelPageTable;
 }

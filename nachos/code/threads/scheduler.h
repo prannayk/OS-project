@@ -16,37 +16,29 @@
 // The following class defines the scheduler/dispatcher abstraction -- 
 // the data structures and operations needed to keep track of which 
 // thread is running, and which threads are ready but not running.
-struct ThreadNode {
-	NachOSThread *  thread;
-	int waketick;
-};
-
-struct ThreadPointer {
-	NachOSThread* thread;
-    int pid;
-};
 
 class ProcessScheduler {
-	ThreadNode** sleepThreads;
-	ListElement *joinThreads;
-	int maxvalue;
   public:
-    ProcessScheduler();	// Initialize list of ready threads 
-    ~ProcessScheduler();// De-allocate ready list
-	void addExitListener(NachOSThread*, int);
-	void wakeAction(int, int);
-	void addToSleepThreads(NachOSThread* thread, int waketick);
-	int getMinWakeTick();
-	NachOSThread* removeSleepThread();
-    void MoveThreadToReadyQueue(NachOSThread* thread);	// Thread can be dispatched.
+    ProcessScheduler();			// Initialize list of ready threads 
+    ~ProcessScheduler();			// De-allocate ready list
+
+    void MoveThreadToReadyQueue(NachOSThread* thread);	// NachOSThread can be dispatched.
     NachOSThread* SelectNextReadyThread();		// Dequeue first thread on the ready 
 					// list, if any, and return thread.
-    void ScheduleThread (NachOSThread* nextThread);	// Cause nextThread to start running
+    void ScheduleThread(NachOSThread* nextThread);	// Cause nextThread to start running
     void Print();			// Print contents of ready list
-    
+
+    void Tail();			// Used by fork()
+
+    void SetEmptyReadyQueueStartTime (int ticks);
+
+    void UpdateThreadPriority (void);	// Used by the UNIX scheduler
+   
   private:
     List *listOfReadyThreads;  		// queue of threads that are ready to run,
 				// but not running
+
+    int empty_ready_queue_start_time;
 };
 
 #endif // SCHEDULER_H

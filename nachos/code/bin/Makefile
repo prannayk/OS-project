@@ -14,7 +14,7 @@
 # all: coff2noff
 
 CC=gcc
-CFLAGS=-m32 -I./ -I../threads
+CFLAGS=-I./ -I../threads -m32
 LD=gcc -m32
 
 #all: coff2noff disassemble 

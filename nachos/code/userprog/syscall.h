@@ -35,19 +35,21 @@
 #define SysCall_PrintInt	11
 #define SysCall_PrintChar	12
 #define SysCall_PrintString	13
-
 #define SysCall_GetReg		14
 #define SysCall_GetPA		15
 #define SysCall_GetPID		16
 #define SysCall_GetPPID		17
-
 #define SysCall_Sleep		18
-
 #define SysCall_Time		19
-
-#define SysCall_PrintIntHex  	20
-
-#define SysCall_NumInstr	50
+#define SysCall_PrintIntHex	20
+#define SysCall_SemGet		21
+#define SysCall_SemOp		22
+#define SysCall_SemCtl		23
+#define SysCall_CondGet		24
+#define SysCall_CondOp		25
+#define SysCall_CondRemove	26
+#define SysCall_ShmAllocate	27
+#define SysCall_NumInstr        50
 
 #ifndef IN_ASM
 
@@ -74,7 +76,7 @@ void syscall_wrapper_Exit(int status);
 /* This is same as PID. */
 typedef int SpaceId;	
  
-/* Run the executable, stored in the Nachos file "name"
+/* Run the executable, stored in the Nachos file "name". Doesn't return.
  */
 void syscall_wrapper_Exec(char *name);
  
@@ -135,7 +137,7 @@ void syscall_wrapper_Close(OpenFileId id);
 
 /* Fork a thread. Returns child pid to parent and zero to child.
  */
-int syscall_wrapper_Fork(void);
+int syscall_wrapper_Fork();
 
 /* Yield the CPU to another runnable thread, whether in this address space 
  * or not. 
@@ -146,11 +148,11 @@ void syscall_wrapper_Yield();
 
 void syscall_wrapper_PrintInt (int x);
 
+void syscall_wrapper_PrintIntHex (int x);
+
 void syscall_wrapper_PrintChar (char x);
 
 void syscall_wrapper_PrintString (char *x);
-
-void syscall_wrapper_PrintIntHex (int x);
 
 int syscall_wrapper_GetReg (int regno);
 
@@ -164,8 +166,21 @@ void syscall_wrapper_Sleep (unsigned);
 
 int syscall_wrapper_GetTime (void);
 
-int syscall_wrapper_GetNumInstr (void);
+int systm_SemGet (int key);
 
+void syscall_wrapper_SemOp (int semid, int adjust);
+
+int syscall_wrapper_SemCtl (int semid, unsigned command, int *val);
+
+int syscall_wrapper_CondGet (int key);
+
+void syscall_wrapper_CondOp (int condid, unsigned op, int semid);
+
+int syscall_wrapper_CondRemove (int condid);
+
+unsigned syscall_wrapper_ShmAllocate (unsigned size);
+
+int syscall_wrapper_GetNumInstr (void);
 #endif /* IN_ASM */
 
 #endif /* SYSCALL_H */

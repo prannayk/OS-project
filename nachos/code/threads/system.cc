@@ -19,6 +19,23 @@ Statistics *stats;			// performance metrics
 Timer *timer;				// the hardware timer device,
 					// for invoking context switches
 
+unsigned numPagesAllocated;              // number of physical frames allocated
+
+NachOSThread *threadArray[MAX_THREAD_COUNT];  // Array of thread pointers
+unsigned thread_index;			// Index into this array (also used to assign unique pid)
+bool initializedConsoleSemaphores;
+bool exitThreadArray[MAX_THREAD_COUNT];  //Marks exited threads
+
+TimeSortedWaitQueue *sleepQueueHead;	// Needed to implement syscall_wrapper_Sleep
+
+int schedulingAlgo;			// Scheduling algorithm to simulate
+char **batchProcesses;			// Names of batch processes
+int *priority;				// Process priority
+
+int cpu_burst_start_time;        // Records the start of current CPU burst
+int completionTimeArray[MAX_THREAD_COUNT];        // Records the completion time of all simulated threads
+bool excludeMainThread;		// Used by completion time statistics calculation
+
 #ifdef FILESYS_NEEDED
 FileSystem  *fileSystem;
 #endif
@@ -35,7 +52,6 @@ Machine *machine;	// user program memory and registers
 PostOffice *postOffice;
 #endif
 
-bool initializedConsoleSemaphores;
 
 // External definition, to allow us to take a pointer to this function
 extern void Cleanup();
@@ -61,14 +77,23 @@ extern void Cleanup();
 static void
 TimerInterruptHandler(int dummy)
 {
-	int presentTicks = stats->getTotalTicks();
-	while(presentTicks > scheduler->getMinWakeTick()){
-		NachOSThread * thread = scheduler->removeSleepThread();
-		IntStatus old = interrupt->SetLevel(IntOff);
-		scheduler->MoveThreadToReadyQueue(thread);
-		interrupt->SetLevel(old);
-	}
-    if (interrupt->getStatus() != IdleMode)	interrupt->YieldOnReturn();
+    TimeSortedWaitQueue *ptr;
+    if (interrupt->getStatus() != IdleMode) {
+        // Check the head of the sleep queue
+        while ((sleepQueueHead != NULL) && (sleepQueueHead->GetWhen() <= (unsigned)stats->totalTicks)) {
+           sleepQueueHead->GetThread()->Schedule();
+           ptr = sleepQueueHead;
+           sleepQueueHead = sleepQueueHead->GetNext();
+           delete ptr;
+        }
+        //printf("[%d] Timer interrupt.\n", stats->totalTicks);
+        if ((schedulingAlgo == ROUND_ROBIN) || (schedulingAlgo == UNIX_SCHED)) {
+           if ((stats->totalTicks - cpu_burst_start_time) >= SCHED_QUANTUM) {
+              ASSERT(cpu_burst_start_time == currentThread->GetCPUBurstStartTime());
+	      interrupt->YieldOnReturn();
+           }
+        }
+    }
 }
 
 //----------------------------------------------------------------------
@@ -84,12 +109,31 @@ TimerInterruptHandler(int dummy)
 void
 Initialize(int argc, char **argv)
 {
-    int argCount;
+    int argCount, i;
     char* debugArgs = "";
     bool randomYield = FALSE;
 
     initializedConsoleSemaphores = false;
+    numPagesAllocated = 0;
 
+    schedulingAlgo = NON_PREEMPTIVE_BASE;	// Default
+
+    batchProcesses = new char*[MAX_BATCH_SIZE];
+    ASSERT(batchProcesses != NULL);
+    for (i=0; i<MAX_BATCH_SIZE; i++) {
+       batchProcesses[i] = new char[256];
+       ASSERT(batchProcesses[i] != NULL);
+    }
+
+    priority = new int[MAX_BATCH_SIZE];
+    ASSERT(priority != NULL);
+    
+    excludeMainThread = FALSE;
+
+    for (i=0; i<MAX_THREAD_COUNT; i++) { threadArray[i] = NULL; exitThreadArray[i] = false; completionTimeArray[i] = -1; }
+    thread_index = 0;
+
+    sleepQueueHead = NULL;
 #ifdef USER_PROGRAM
     bool debugUserProg = FALSE;	// single step user program
 #endif
@@ -143,15 +187,18 @@ Initialize(int argc, char **argv)
     interrupt = new Interrupt;			// start up interrupt handling
     scheduler = new ProcessScheduler();		// initialize the ready queue
     //if (randomYield)				// start the timer (if needed)
-	timer = new Timer(TimerInterruptHandler, 0, randomYield);
+       timer = new Timer(TimerInterruptHandler, 0, randomYield);
 
     threadToBeDestroyed = NULL;
 
     // We didn't explicitly allocate the current thread we are running in.
-    // But if it ever tries to give up the CPU, we better have a Thread
-    // object to save its state. 
-    currentThread = new NachOSThread("main");		
+    // But if it ever tries to give up the CPU, we better have a NachOSThread
+    // object to save its state.
+    currentThread = NULL;
+    currentThread = new NachOSThread("main", MIN_NICE_PRIORITY);		
     currentThread->setStatus(RUNNING);
+    stats->start_time = stats->totalTicks;
+    cpu_burst_start_time = stats->totalTicks;
 
     interrupt->Enable();
     CallOnUserAbort(Cleanup);			// if user hits ctl-C
@@ -203,4 +250,10 @@ Cleanup()
     
     Exit(0);
 }
-
+//------------------------
+// GetPhysicalPage
+// returns index of next physical page
+int
+GetPhysicalPage(){
+	return (numPagesAllocated++);
+}

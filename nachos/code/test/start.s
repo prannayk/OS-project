@@ -155,7 +155,7 @@ syscall_wrapper_PrintString:
 	.end syscall_wrapper_PrintString
 
 	.globl syscall_wrapper_GetReg
-	.ent    system_callGetReg
+	.ent    syscall_wrapper_GetReg
 syscall_wrapper_GetReg:
 	addiu $2,$0,SysCall_GetReg
 	syscall
@@ -217,6 +217,62 @@ syscall_wrapper_PrintIntHex:
 	syscall
 	j	$31
 	.end syscall_wrapper_PrintIntHex
+
+	.globl syscall_wrapper_SemGet
+        .ent    syscall_wrapper_SemGet
+syscall_wrapper_SemGet:
+        addiu $2,$0,SysCall_SemGet
+        syscall
+        j       $31
+        .end syscall_wrapper_SemGet
+
+        .globl syscall_wrapper_SemOp
+        .ent    syscall_wrapper_SemOp
+syscall_wrapper_SemOp:
+        addiu $2,$0,SysCall_SemOp
+        syscall
+        j       $31
+        .end syscall_wrapper_SemOp
+
+        .globl syscall_wrapper_SemCtl
+        .ent    syscall_wrapper_SemCtl
+syscall_wrapper_SemCtl:
+        addiu $2,$0,SysCall_SemCtl
+        syscall
+        j       $31
+        .end syscall_wrapper_SemCtl
+
+        .globl syscall_wrapper_CondGet
+        .ent    syscall_wrapper_CondGet
+syscall_wrapper_CondGet:
+        addiu $2,$0,SysCall_CondGet
+        syscall
+        j       $31
+        .end syscall_wrapper_CondGet
+
+        .globl syscall_wrapper_CondOp
+        .ent    syscall_wrapper_CondOp
+syscall_wrapper_CondOp:
+        addiu $2,$0,SysCall_CondOp
+        syscall
+        j       $31
+        .end syscall_wrapper_CondOp
+
+        .globl syscall_wrapper_CondRemove
+        .ent    syscall_wrapper_CondRemove
+syscall_wrapper_CondRemove:
+        addiu $2,$0,SysCall_CondRemove
+        syscall
+        j       $31
+        .end syscall_wrapper_CondRemove
+
+        .globl syscall_wrapper_ShmAllocate
+        .ent    syscall_wrapper_ShmAllocate
+syscall_wrapper_ShmAllocate:
+	addiu $2,$0,SysCall_ShmAllocate
+        syscall
+        j       $31
+        .end syscall_wrapper_ShmAllocate
 
 /* dummy function to keep gcc happy */
         .globl  __main

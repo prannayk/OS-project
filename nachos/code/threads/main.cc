@@ -61,6 +61,8 @@ extern void Print(char *file), PerformanceTest(void);
 extern void LaunchUserProcess(char *file), ConsoleTest(char *in, char *out);
 extern void MailTest(int networkID);
 
+extern void ReadInputAndFork(char *file);
+
 //----------------------------------------------------------------------
 // main
 // 	Bootstrap the operating system kernel.  
@@ -81,9 +83,10 @@ main(int argc, char **argv)
     int argCount;			// the number of arguments 
 					// for a particular command
 
+    int schedPriority = MAX_NICE_PRIORITY;
+
     DEBUG('t', "Entering main");
     (void) Initialize(argc, argv);
-    
 #ifdef THREADS
     ThreadTest();
 #endif
@@ -93,7 +96,26 @@ main(int argc, char **argv)
         if (!strcmp(*argv, "-z"))               // print copyright
             printf (copyright);
 #ifdef USER_PROGRAM
-        if (!strcmp(*argv, "-x")) {        	// run a user program
+        if (!strcmp(*argv, "-A")) {		// read scheduling algorithm
+           schedulingAlgo = atoi(*(argv + 1));
+           argCount = 2;
+           ASSERT((schedulingAlgo > 0) && (schedulingAlgo <= 4));
+           if ((schedulingAlgo == ROUND_ROBIN) || (schedulingAlgo == UNIX_SCHED)) {
+              ASSERT (SCHED_QUANTUM > 0);
+           }
+           if (schedulingAlgo == UNIX_SCHED) {
+              currentThread->SetBasePriority(schedPriority+DEFAULT_BASE_PRIORITY);
+              currentThread->SetPriority(schedPriority+DEFAULT_BASE_PRIORITY);
+              currentThread->SetUsage(0);
+           }
+        } else if (!strcmp(*argv, "-P")) {
+            schedPriority = atoi(*(argv + 1));
+            argCount = 2;
+            ASSERT((schedPriority >= 0) && (schedPriority <= 100));
+            currentThread->SetBasePriority(schedPriority+DEFAULT_BASE_PRIORITY);
+            currentThread->SetPriority(schedPriority+DEFAULT_BASE_PRIORITY);
+            currentThread->SetUsage(0);
+        } else if (!strcmp(*argv, "-x")) {        	// run a user program
 	    ASSERT(argc > 1);
             LaunchUserProcess(*(argv + 1));
             argCount = 2;
@@ -108,7 +130,11 @@ main(int argc, char **argv)
 	    interrupt->Halt();		// once we start the console, then 
 					// Nachos will loop forever waiting 
 					// for console input
-	}
+	} else if (!strcmp(*argv, "-F")) {	// test multiprogramming
+            ASSERT (argc > 1);
+            ReadInputAndFork(*(argv + 1));
+            argCount = 2;
+        }
 #endif // USER_PROGRAM
 #ifdef FILESYS
 	if (!strcmp(*argv, "-cp")) { 		// copy from UNIX to Nachos
@@ -142,7 +168,7 @@ main(int argc, char **argv)
         }
 #endif // NETWORK
     }
-
+	
     currentThread->FinishThread();	// NOTE: if the procedure "main" 
 				// returns, then the program "nachos"
 				// will exit (as any other normal program
